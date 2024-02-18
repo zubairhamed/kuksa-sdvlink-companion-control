@@ -34,6 +34,13 @@ from kuksa_client.grpc import EntryRequest
 from kuksa_client.grpc import View
 from kuksa_client.grpc import SubscribeEntry
 import asyncio 
+from colorama import init
+from colorama import Fore
+import calendar
+import time
+from datetime import datetime
+
+init(autoreset=True)
 
 # VSS Path definitions
 PATH_VEHICLE_SPEED = "Vehicle.Speed"
@@ -77,8 +84,28 @@ provisioningDict = {
     PATH_BRAKEPEDAL_POSITION: 0
 }
 
-def kbControlPrint(kb, path, val):
-    print (f"[{kb}] Set {path} to {val}")
+def log(msg):
+    current_GMT = time.gmtime()
+    ts = calendar.timegm(current_GMT)
+    dt = datetime.fromtimestamp(ts)
+    print(f"{Fore.GREEN} {dt} {msg}")
+
+def kbMessage(kb, path, val):
+    log(f"{Fore.BLUE} [{kb}] {Fore.CYAN}{path} -> {Fore.RED}{val}")
+
+def logError(msg):
+    log(f"{Fore.RED} {msg}")
+        
+def logWarn(msg):
+    m = Fore.YELLOW + msg
+    log(m)
+
+def logInfo(msg):
+    m = Fore.CYAN + msg
+    log(m)
+
+def logCarEngineTurnOn():
+    logWarn("Car engines are off. Turn on car engine (Q) first")
 
 async def Set(path, val, valType, kb):
     try:
@@ -86,14 +113,15 @@ async def Set(path, val, valType, kb):
             entry = EntryUpdate(DataEntry(path, value=Datapoint(value=val), metadata=Metadata(data_type=valType)), (VssField.VALUE,))
             await vssClient.set(updates=(entry,))
             if kb is not None:
-                kbControlPrint(kb, path, val)
+                kbMessage(kb, path, val)
     except Exception as err:
-        print(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
+        logError(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
 
 async def handleAccelerate():
+    """ Accelerate car. If car was in N or R gear and speed goes above 0, automatically goes into D """
     engineOn = valueMap[PATH_ENGINE_RUNNING]
-    if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+    if not engineOn:        
+        logCarEngineTurnOn()
         return
 
     originalSpeed = valueMap[PATH_VEHICLE_SPEED]
@@ -117,9 +145,10 @@ async def handleAccelerate():
         await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
 
 async def handleDecelerate():
+    """ Decelerates car. If car was in N or D gear and speed goes below 0, automatically goes into R """
     engineOn = valueMap[PATH_ENGINE_RUNNING]
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
     originalSpeed = valueMap[PATH_VEHICLE_SPEED]
@@ -141,49 +170,58 @@ async def handleDecelerate():
 
 
 async def handleLeftTurn():
+    """ Axle turn Left to turn car. VSS Values are Positive """
     engineOn = valueMap[PATH_ENGINE_RUNNING]
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
     turnAngle = min(valueMap[PATH_STEERING_ANGLE] + STEERING_INCREMENT, MAX_STEERING_LEFT)
     await Set(PATH_STEERING_ANGLE, turnAngle, DataType.FLOAT, "A")
 
 async def handleRightTurn():    
+    """ Axle turn Right to turn car. VSS Values are Negative """
     engineOn = valueMap[PATH_ENGINE_RUNNING]
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
     turnAngle = max(valueMap[PATH_STEERING_ANGLE] - STEERING_INCREMENT, MAX_STEERING_RIGHT)
     await Set(PATH_STEERING_ANGLE, turnAngle, DataType.FLOAT, "D")
 
 async def handleLeftSignal():
+    """ Toggles Left Turn Indicator """
     leftSignal = not valueMap[PATH_LEFTINDICATOR_SIGNALING]
     await Set(PATH_LEFTINDICATOR_SIGNALING, leftSignal, DataType.BOOLEAN, "SHIFT+A")
 
 async def handleRightSignal():
+    """ Toggles Right Turn Indicator """
     rightSignal = not valueMap[PATH_RIGHTINDICATOR_SIGNALING]
     await Set(PATH_RIGHTINDICATOR_SIGNALING, rightSignal, DataType.BOOLEAN, "SHIFT+D")
 
 async def handleEnginePower():
+    """ Toggles Engine """
     engineOn = not valueMap[PATH_ENGINE_RUNNING]
+
+    # TODO: If speed is positive, decelerate speed over time
     await Set(PATH_ENGINE_RUNNING, engineOn, DataType.BOOLEAN, "Q")
 
 async def handleLowBeam():
+    """ Toggle Low Beam Light """
     lowBeamOn = not valueMap[PATH_BEAM_LOW_ISON]
     await Set(PATH_BEAM_LOW_ISON, lowBeamOn, DataType.BOOLEAN, "L")
 
 async def handleHighBeam():
+    """ Toggle High Beam Light """
     highBeamOn = not valueMap[PATH_BEAM_HIGH_ISON]
     await Set(PATH_BEAM_HIGH_ISON, highBeamOn, DataType.BOOLEAN, "SHIFT+L")
-
 
 async def unimplemented():
     print("Not implemented yet")
     pass
 
 async def subscribe():
+    """ Subscribe to values used by app and sync changes """
     global provisionDict
 
     async with vssClient:
@@ -195,15 +233,17 @@ async def subscribe():
             for update in updates:
                 if update.entry.value is not None:
                     valueMap[update.entry.path] = update.entry.value.value
-                    print(f"[SUB] {update.entry.path}: {update.entry.value.value}")
+                    kbMessage("SUB", update.entry.path, update.entry.value.value)
 
 def provisionValue(entries, path, defaultValue):
+    """ Sets up default values for a given entry """
     for e in entries:
         if e.path == path:
             valueMap[path] = e.value.value if e.value is not None else defaultValue
             break
 
 async def provisionVehicleValues():
+    """ Get a list of values of interest for app for initialization """
     print(">>> Initializing values from Data Broker")
     try:
         async with vssClient:
@@ -217,61 +257,63 @@ async def provisionVehicleValues():
                 print(f"{key} : {value}")
 
     except Exception as err:
-        print(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
+        logError(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
 
 async def handleGearPark():
+    """ Set Gear to Park """
     engineOn = valueMap[PATH_ENGINE_RUNNING]
-    if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
-        return
-
     currentSpeed = valueMap[PATH_VEHICLE_SPEED]
-    if currentSpeed > 0:
-        print("Unable to shift to Park. Decelerate to a stop before putting into Park")
+
+    if not engineOn or currentSpeed > 0:
+        if not engineOn:
+            logCarEngineTurnOn()
+        else:
+            logWarn("Unable to shift to Park. Decelerate to a stop before putting into Park")
         return
 
-    print("Shifted to Gear: Parked")
+    logInfo("Shifted to Gear: Parked")
     await Set(PATH_CURRENTGEAR, GEAR_PARKED, DataType.INT8, "1")
 
 async def handleGearReverse():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
-    if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
-        return
-
     currentSpeed = valueMap[PATH_VEHICLE_SPEED]
-    if currentSpeed > 0:
-        print("Unable to shift to Park. Decelerate to a stop before putting into Park")
-        return
 
-    print("Shifted to Gear: Reverse")
-    await Set(PATH_CURRENTGEAR, GEAR_REVERSE, DataType.INT8, "R")
+    if not engineOn:
+        logCarEngineTurnOn()
+    elif currentSpeed <= 0:
+        logInfo("Shifted to Gear: Reverse")
+        await Set(PATH_CURRENTGEAR, GEAR_REVERSE, DataType.INT8, "R")
+    else:
+        logWarn("Unable to shift to Reverse. Decelerate to a stop before shifting")
 
 async def handleGearNeutral():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
+
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
-    print("Shifted to Gear: Neutral")    
+    logInfo("Shifted to Gear: Neutral")    
     await Set(PATH_CURRENTGEAR, GEAR_NEUTRAL, DataType.INT8, "2")
 
 async def handleGearDrive():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
+
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
-    print("Shifted to Gear: Drive")
+    logInfo("Shifted to Gear: Drive")
     await Set(PATH_CURRENTGEAR, GEAR_DRIVE, DataType.INT8, "E")
 
 async def handleGearManual():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
+
     if not engineOn:
-        print("Car engines are off. Turn on car engine (Q) first")
+        logCarEngineTurnOn()
         return
 
-    print("Shifted to Gear: Manual")
+    logInfo("Shifted to Gear: Manual")
     await Set(PATH_CURRENTGEAR, GEAR_MANUAL, DataType.INT8, "3")
 
 # Keyboard Bindings
@@ -290,29 +332,35 @@ keyboard.add_hotkey('3', lambda: asyncio.run(handleGearManual())) # Gear: Sport/
 keyboard.add_hotkey('R', lambda: asyncio.run(handleGearReverse())) # Gear: Reverse
 keyboard.add_hotkey('E', lambda: asyncio.run(handleGearDrive())) # Gear: Drive
 
-print("")
-print(">>>> SDV.Link Vehicle Controller Companion App <<<<")
-print("")
-print("")
-print(" ------- Keyboard Controls ---- ")
-print("| Key       | function         |")
-print(" ------------------------------ ")
-print("| Q        | engine start/stop |")
-print("| W        | accelerate        |")
-print("| A        | decelerate/brake  |")
-print("| S        | left turn         |")
-print("| D        | right turn        |")
-print("| SHIFT+A  | left signal       |")
-print("| SHIFT+D  | right signal      |")
-print("| L        | low beam          |")
-print("| SHIFT+L  | high beam         |")
-print("| 1        | gear park         |")
-print("| 2        | gear neutral      |")
-print("| 3        | gear sport/manual |")
-print("| R        | gear reverse      |")
-print("| E        | gear drive        |")
-print(" ----------------------------- ")
-print("")
+print("""
+   _____ _______      ___      _       _    
+  / ____|  __ \\ \\    / / |    (_)     | |   
+ | (___ | |  | \\ \\  / /| |     _ _ __ | | __
+  \\___ \\| |  | |\\ \\/ / | |    | | '_ \\| |/ /
+  ____) | |__| | \\  /  | |____| | | | |   < 
+ |_____/|_____/   \\(_) |______|_|_| |_|_|\\_\\
+      
+   >>> Vehicle Controller Companion App <<<
+                                                    
+     ------- Keyboard Controls ---- 
+    | Key       | Function         |
+     ------------------------------ 
+    | Q        | engine start/stop |
+    | W        | accelerate        |
+    | A        | decelerate/brake  |
+    | S        | left turn         |
+    | D        | right turn        |
+    | SHIFT+A  | left signal       |
+    | SHIFT+D  | right signal      |
+    | L        | low beam          |
+    | SHIFT+L  | high beam         |
+    | 1        | gear park         |
+    | 2        | gear neutral      |
+    | 3        | gear sport/manual |
+    | R        | gear reverse      |
+    | E        | gear drive        |
+     ------------------------------ 
+""")
 asyncio.run(provisionVehicleValues())
 asyncio.run(subscribe())
 
