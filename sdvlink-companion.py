@@ -124,21 +124,11 @@ async def handleRightTurn():
     await Set(PATH_STEERING_ANGLE, turnAngle, DataType.FLOAT, "D")
 
 async def handleLeftSignal():
-    leftSignal = valueMap[PATH_LEFTINDICATOR_SIGNALING]
-
-    if leftSignal:
-        leftSignal = False
-    else:
-        leftSignal = True        
+    leftSignal = not valueMap[PATH_LEFTINDICATOR_SIGNALING]
     await Set(PATH_LEFTINDICATOR_SIGNALING, leftSignal, DataType.BOOLEAN, "SHIFT+A")
 
 async def handleRightSignal():
-    rightSignal = valueMap[PATH_RIGHTINDICATOR_SIGNALING]
-
-    if rightSignal:
-        rightSignal = False
-    else:
-        rightSignal = True        
+    rightSignal = not valueMap[PATH_RIGHTINDICATOR_SIGNALING]
     await Set(PATH_RIGHTINDICATOR_SIGNALING, rightSignal, DataType.BOOLEAN, "SHIFT+D")
 
 async def handleEnginePower():
