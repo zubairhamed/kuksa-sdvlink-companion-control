@@ -55,7 +55,7 @@ PATH_BRAKEPEDAL_POSITION = "Vehicle.Chassis.Brake.PedalPosition"
 
 MAX_STEERING_LEFT = 40
 MAX_STEERING_RIGHT = -40
-STEERING_INCREMENT = 5
+STEERING_INCREMENT = 4
 
 MAX_SPEED = 240
 MIN_SPEED = 0
@@ -235,7 +235,7 @@ async def subscribe():
             for update in updates:
                 if update.entry.value is not None:
                     valueMap[update.entry.path] = update.entry.value.value
-                    kbMessage("SUB", update.entry.path, update.entry.value.value)
+                    # kbMessage("SUB", update.entry.path, update.entry.value.value)
 
 def provisionValue(entries, path, defaultValue):
     """ Sets up default values for a given entry """
