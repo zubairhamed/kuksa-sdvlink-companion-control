@@ -54,6 +54,12 @@ MAX_SPEED = 240
 MIN_SPEED = 0
 SPEED_INCREMENT = 5
 
+GEAR_PARKED = 126
+GEAR_REVERSE = -1
+GEAR_NEUTRAL = 0
+GEAR_DRIVE = 127
+GEAR_MANUAL = 1
+
 DATABROKER_ADDRESS = "localhost"
 DATABROKER_PORT = 55555
 vssClient = VSSClient(DATABROKER_ADDRESS, DATABROKER_PORT) 
@@ -67,7 +73,7 @@ provisioningDict = {
     PATH_STEERING_ANGLE: 0,
     PATH_BEAM_LOW_ISON: False,
     PATH_BEAM_HIGH_ISON: False,
-    PATH_CURRENTGEAR: "P",
+    PATH_CURRENTGEAR:GEAR_PARKED,
     PATH_BRAKEPEDAL_POSITION: 0
 }
 
@@ -90,8 +96,26 @@ async def handleAccelerate():
         print("Car engines are off. Turn on car engine (Q) first")
         return
 
-    currentSpeed = min(valueMap[PATH_VEHICLE_SPEED] + SPEED_INCREMENT, MAX_SPEED)
-    await Set(PATH_VEHICLE_SPEED, currentSpeed, DataType.FLOAT, "W")
+    originalSpeed = valueMap[PATH_VEHICLE_SPEED]
+    newSpeed = min(originalSpeed + SPEED_INCREMENT, MAX_SPEED)    
+
+    if newSpeed == 0:
+        # We are stationary, so set car to neutral
+        await handleGearNeutral()
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+        return    
+
+    if newSpeed > 0:
+        # If previous speed was negative and we went into positive speed, go into drive gear
+        if originalSpeed <= 0:
+            await handleGearDrive()
+
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+    else:
+        # Pump breaks if in positive speed to decelerate
+        await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8, "S")    
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+        await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
 
 
 async def handleDecelerate():
@@ -100,10 +124,25 @@ async def handleDecelerate():
         print("Car engines are off. Turn on car engine (Q) first")
         return
 
-    currentSpeed = max(valueMap[PATH_VEHICLE_SPEED] - SPEED_INCREMENT, 0)
-    await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8, "S")
-    await Set(PATH_VEHICLE_SPEED, currentSpeed, DataType.FLOAT, "S")
-    await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
+    originalSpeed = valueMap[PATH_VEHICLE_SPEED]
+    newSpeed = max(originalSpeed - SPEED_INCREMENT, -MAX_SPEED)
+
+    if newSpeed == 0:
+        # We are stationary, so set car to neutral
+        await handleGearNeutral()
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+        return
+
+    if newSpeed < 0:
+        # If previous speed was positive and now we're into negative, go into reverse gear
+        if originalSpeed >= 0:
+            await handleGearReverse()
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+    else:
+        # Pump breaks if in positive speed to decelerate
+        await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8, "S")    
+        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+        await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
 
 async def handleLeftTurn():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
@@ -142,6 +181,7 @@ async def handleLowBeam():
 async def handleHighBeam():
     highBeamOn = not valueMap[PATH_BEAM_HIGH_ISON]
     await Set(PATH_BEAM_HIGH_ISON, highBeamOn, DataType.BOOLEAN, "SHIFT+L")
+
 
 async def unimplemented():
     print("Not implemented yet")
@@ -183,20 +223,76 @@ async def provisionVehicleValues():
     except Exception as err:
         print(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
 
+async def handleGearPark():
+    engineOn = valueMap[PATH_ENGINE_RUNNING]
+    if not engineOn:
+        print("Car engines are off. Turn on car engine (Q) first")
+        return
 
+    currentSpeed = valueMap[PATH_VEHICLE_SPEED]
+    if currentSpeed > 0:
+        print("Unable to shift to Park. Decelerate to a stop before putting into Park")
+        return
+
+    print("Shifted to Gear: Parked")
+    await Set(PATH_CURRENTGEAR, GEAR_PARKED, DataType.INT8, "1")
+
+async def handleGearReverse():
+    engineOn = valueMap[PATH_ENGINE_RUNNING]
+    if not engineOn:
+        print("Car engines are off. Turn on car engine (Q) first")
+        return
+
+    currentSpeed = valueMap[PATH_VEHICLE_SPEED]
+    if currentSpeed > 0:
+        print("Unable to shift to Park. Decelerate to a stop before putting into Park")
+        return
+
+    print("Shifted to Gear: Reverse")
+    await Set(PATH_CURRENTGEAR, GEAR_REVERSE, DataType.INT8, "R")
+
+async def handleGearNeutral():
+    engineOn = valueMap[PATH_ENGINE_RUNNING]
+    if not engineOn:
+        print("Car engines are off. Turn on car engine (Q) first")
+        return
+
+    print("Shifted to Gear: Neutral")    
+    await Set(PATH_CURRENTGEAR, GEAR_NEUTRAL, DataType.INT8, "2")
+
+async def handleGearDrive():
+    engineOn = valueMap[PATH_ENGINE_RUNNING]
+    if not engineOn:
+        print("Car engines are off. Turn on car engine (Q) first")
+        return
+
+    print("Shifted to Gear: Drive")
+    await Set(PATH_CURRENTGEAR, GEAR_DRIVE, DataType.INT8, "E")
+
+async def handleGearManual():
+    engineOn = valueMap[PATH_ENGINE_RUNNING]
+    if not engineOn:
+        print("Car engines are off. Turn on car engine (Q) first")
+        return
+
+    print("Shifted to Gear: Manual")
+    await Set(PATH_CURRENTGEAR, GEAR_MANUAL, DataType.INT8, "3")
 
 # Keyboard Bindings
-keyboard.add_hotkey('Q', lambda: asyncio.run(handleEnginePower()))
-keyboard.add_hotkey('W', lambda: asyncio.run(handleAccelerate()))
-keyboard.add_hotkey('S', lambda: asyncio.run(handleDecelerate()))
-keyboard.add_hotkey('A', lambda: asyncio.run(handleLeftTurn()))
-keyboard.add_hotkey('D', lambda: asyncio.run(handleRightTurn()))
-keyboard.add_hotkey('SHIFT+A', lambda: asyncio.run(handleLeftSignal()))
-keyboard.add_hotkey('SHIFT+D', lambda: asyncio.run(handleRightSignal()))
-keyboard.add_hotkey('L', lambda: asyncio.run(handleLowBeam()))
-keyboard.add_hotkey('SHIFT+L', lambda: asyncio.run(handleHighBeam()))
-keyboard.add_hotkey('UP', lambda: asyncio.run(unimplemented())) 
-keyboard.add_hotkey('DOWN', lambda: asyncio.run(unimplemented()))
+keyboard.add_hotkey('Q', lambda: asyncio.run(handleEnginePower())) # Turn off and On Engine
+keyboard.add_hotkey('W', lambda: asyncio.run(handleAccelerate())) # Acceelerate
+keyboard.add_hotkey('S', lambda: asyncio.run(handleDecelerate())) # Decelerate/Brake
+keyboard.add_hotkey('A', lambda: asyncio.run(handleLeftTurn())) # Turn Axle Left
+keyboard.add_hotkey('D', lambda: asyncio.run(handleRightTurn())) # Turn Axle Right
+keyboard.add_hotkey('SHIFT+A', lambda: asyncio.run(handleLeftSignal())) # Left Turn Indicator
+keyboard.add_hotkey('SHIFT+D', lambda: asyncio.run(handleRightSignal())) # Right Turn Indicator
+keyboard.add_hotkey('L', lambda: asyncio.run(handleLowBeam())) # Low Beam Toggle
+keyboard.add_hotkey('SHIFT+L', lambda: asyncio.run(handleHighBeam())) # High Beam Toggle
+keyboard.add_hotkey('1', lambda: asyncio.run(handleGearPark())) # Gear: Park
+keyboard.add_hotkey('2', lambda: asyncio.run(handleGearNeutral())) # Gear: Neutral
+keyboard.add_hotkey('3', lambda: asyncio.run(handleGearManual())) # Gear: Sport/Manual
+keyboard.add_hotkey('R', lambda: asyncio.run(handleGearReverse())) # Gear: Reverse
+keyboard.add_hotkey('E', lambda: asyncio.run(handleGearDrive())) # Gear: Drive
 
 print("")
 print(">>>> SDV.Link Vehicle Controller Companion App <<<<")
@@ -214,12 +310,14 @@ print("| SHIFT+A  | left signal       |")
 print("| SHIFT+D  | right signal      |")
 print("| L        | low beam          |")
 print("| SHIFT+L  | high beam         |")
-print("| UP       | gear shift up     |")
-print("| DOWN     | gear shift down   |")
+print("| 1        | gear park         |")
+print("| 2        | gear neutral      |")
+print("| 3        | gear sport/manual |")
+print("| R        | gear reverse      |")
+print("| E        | gear drive        |")
 print(" ----------------------------- ")
 print("")
 asyncio.run(provisionVehicleValues())
 asyncio.run(subscribe())
-
 
 keyboard.wait()
