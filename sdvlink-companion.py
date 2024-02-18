@@ -102,21 +102,19 @@ async def handleAccelerate():
     if newSpeed == 0:
         # We are stationary, so set car to neutral
         await handleGearNeutral()
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
-        return    
+
+    if newSpeed > 0 and originalSpeed <= 0:
+        # If previous speed was negative and we went into positive speed, go into drive gear
+        await handleGearDrive()
 
     if newSpeed > 0:
-        # If previous speed was negative and we went into positive speed, go into drive gear
-        if originalSpeed <= 0:
-            await handleGearDrive()
-
+        # Increase speed and set gear
         await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
     else:
-        # Pump breaks if in positive speed to decelerate
+        # Decelerate and set brake position
         await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8, "S")    
         await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
         await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
-
 
 async def handleDecelerate():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
@@ -130,19 +128,17 @@ async def handleDecelerate():
     if newSpeed == 0:
         # We are stationary, so set car to neutral
         await handleGearNeutral()
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
-        return
 
-    if newSpeed < 0:
+    await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
+
+    if newSpeed < 0 and originalSpeed >= 0:
         # If previous speed was positive and now we're into negative, go into reverse gear
-        if originalSpeed >= 0:
-            await handleGearReverse()
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
-    else:
-        # Pump breaks if in positive speed to decelerate
+        await handleGearReverse()
+    elif newSpeed >= 0:
+        # Pump brakes if in positive speed to decelerate
         await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8, "S")    
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT, "S")
         await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8, "S")
+
 
 async def handleLeftTurn():
     engineOn = valueMap[PATH_ENGINE_RUNNING]
