@@ -223,6 +223,8 @@ async def unimplemented():
 async def subscribe():
     """ Subscribe to values used by app and sync changes """
     global provisionDict
+    print(f"   {Fore.YELLOW}>>> {Fore.RED}Subscribing required values..{Fore.YELLOW}<<<")
+    print("")
 
     async with vssClient:
         entries = []
@@ -244,7 +246,8 @@ def provisionValue(entries, path, defaultValue):
 
 async def provisionVehicleValues():
     """ Get a list of values of interest for app for initialization """
-    print(">>> Initializing values from Data Broker")
+    print(f"   {Fore.YELLOW}>>> {Fore.RED}Initializing values from Data Broker{Fore.YELLOW}<<<")
+
     try:
         async with vssClient:
             provisioningEntries = [EntryRequest(key, View.ALL, (VssField.UNSPECIFIED,)) for key in provisioningDict]
@@ -254,7 +257,8 @@ async def provisionVehicleValues():
                 provisionValue(entries, key, defaultValue)
 
             for key, value in valueMap.items():
-                print(f"{key} : {value}")
+                print(f"   {Fore.CYAN}{key}: {Fore.RED}{value}")
+            print("")
 
     except Exception as err:
         logError(f"ERROR: Unable to connect to Kuksa Databroker {err}. Connection Details: {DATABROKER_ADDRESS} port {DATABROKER_PORT}")
@@ -332,7 +336,7 @@ keyboard.add_hotkey('3', lambda: asyncio.run(handleGearManual())) # Gear: Sport/
 keyboard.add_hotkey('R', lambda: asyncio.run(handleGearReverse())) # Gear: Reverse
 keyboard.add_hotkey('E', lambda: asyncio.run(handleGearDrive())) # Gear: Drive
 
-print("""
+print(f""" {Fore.CYAN}
    _____ _______      ___      _       _    
   / ____|  __ \\ \\    / / |    (_)     | |   
  | (___ | |  | \\ \\  / /| |     _ _ __ | | __
@@ -340,26 +344,27 @@ print("""
   ____) | |__| | \\  /  | |____| | | | |   < 
  |_____/|_____/   \\(_) |______|_|_| |_|_|\\_\\
       
-   >>> Vehicle Controller Companion App <<<
+       {Fore.YELLOW}>>> {Fore.RED}Starting Companion App {Fore.YELLOW}<<<
                                                     
-     ------- Keyboard Controls ---- 
-    | Key       | Function         |
-     ------------------------------ 
-    | Q        | engine start/stop |
-    | W        | accelerate        |
-    | A        | decelerate/brake  |
-    | S        | left turn         |
-    | D        | right turn        |
-    | SHIFT+A  | left signal       |
-    | SHIFT+D  | right signal      |
-    | L        | low beam          |
-    | SHIFT+L  | high beam         |
-    | 1        | gear park         |
-    | 2        | gear neutral      |
-    | 3        | gear sport/manual |
-    | R        | gear reverse      |
-    | E        | gear drive        |
-     ------------------------------ 
+      {Fore.YELLOW} ------- Keyboard Controls ---- 
+      {Fore.YELLOW}| {Fore.RED}Key      {Fore.YELLOW}| {Fore.RED}Function          {Fore.YELLOW}|
+      {Fore.YELLOW} ------------------------------ 
+      {Fore.YELLOW}| {Fore.RED}Q        {Fore.YELLOW}| {Fore.RED}engine start/stop {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}W        {Fore.YELLOW}| {Fore.RED}accelerate        {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}A        {Fore.YELLOW}| {Fore.RED}decelerate/brake  {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}S        {Fore.YELLOW}| {Fore.RED}left turn         {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}D        {Fore.YELLOW}| {Fore.RED}right turn        {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}SHIFT+A  {Fore.YELLOW}| {Fore.RED}left signal       {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}SHIFT+D  {Fore.YELLOW}| {Fore.RED}right signal      {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}L        {Fore.YELLOW}| {Fore.RED}low beam          {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}SHIFT+L  {Fore.YELLOW}| {Fore.RED}high beam         {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}1        {Fore.YELLOW}| {Fore.RED}gear park         {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}2        {Fore.YELLOW}| {Fore.RED}gear neutral      {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}3        {Fore.YELLOW}| {Fore.RED}gear sport/manual {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}R        {Fore.YELLOW}| {Fore.RED}gear reverse      {Fore.YELLOW}|
+      {Fore.YELLOW}| {Fore.RED}E        {Fore.YELLOW}| {Fore.RED}gear drive        {Fore.YELLOW}|
+      {Fore.YELLOW} ------------------------------ 
+      
 """)
 asyncio.run(provisionVehicleValues())
 asyncio.run(subscribe())
