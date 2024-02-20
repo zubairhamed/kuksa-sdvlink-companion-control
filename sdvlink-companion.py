@@ -147,6 +147,7 @@ async def handleAccelerate():
 
     originalSpeed = valueMap[PATH_VEHICLE_SPEED]
     newSpeed = min(originalSpeed + SPEED_INCREMENT, MAX_SPEED)    
+    await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
 
     if newSpeed == 0:
         # We are stationary, so set car to neutral
@@ -161,12 +162,10 @@ async def handleAccelerate():
     if newSpeed > 0:
         # Increase speed and set gear
         await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
     else:
         # Decelerate and set brake position
         await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
         await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8)    
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
         await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8)
 
 async def handleDecelerate():
@@ -176,8 +175,9 @@ async def handleDecelerate():
 
     originalSpeed = valueMap[PATH_VEHICLE_SPEED]
     newSpeed = max(originalSpeed - SPEED_INCREMENT, -MAX_SPEED)
+    await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
 
-    if newSpeed == 0:        
+    if newSpeed == 0:
         # We are stationary, so set car to neutral
         await handleGearNeutral()
         await Set(PATH_ISMOVING, False, DataType.BOOLEAN)
@@ -186,7 +186,6 @@ async def handleDecelerate():
     await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
     if newSpeed < 0 and originalSpeed >= 0:
         # If previous speed was positive and now we're into negative, go into reverse gear
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
         await handleGearReverse()
     elif newSpeed >= 0:
         # Pump brakes if in positive speed to decelerate
