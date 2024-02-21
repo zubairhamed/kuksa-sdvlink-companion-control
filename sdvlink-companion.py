@@ -57,6 +57,7 @@ PATH_ISMOVING = "Vehicle.IsMoving"
 PATH_START_TIME = "Vehicle.StartTime"
 PATH_TRIP_DURATION = "Vehicle.TripDuration"
 PATH_EMERGENCY_BRAKE_DETECTED = "Vehicle.Chassis.Brake.IsDriverEmergencyBrakingDetected"
+PATH_BRAKEPEDAL_ISACTIVE = "Vehicle.Body.Lights.Brake.IsActive"
 PATH_PARKING_BRAKE_ENGAGED = "Vehicle.Chassis.ParkingBrake.IsEngaged"
 
 MAX_STEERING_LEFT = 40
@@ -92,7 +93,8 @@ provisioningDict = {
     PATH_START_TIME: "0000-01-01T00:00Z",
     PATH_TRIP_DURATION: 0,
     PATH_EMERGENCY_BRAKE_DETECTED: False,
-    PATH_PARKING_BRAKE_ENGAGED: True
+    PATH_PARKING_BRAKE_ENGAGED: True,
+    PATH_BRAKEPEDAL_ISACTIVE: "INACTIVE"
 }
 
 tripStart = timer()
@@ -159,14 +161,7 @@ async def handleAccelerate():
         # If previous speed was negative and we went into positive speed, go into drive gear
         await handleGearDrive()
 
-    if newSpeed > 0:
-        # Increase speed and set gear
-        await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
-    else:
-        # Decelerate and set brake position
-        await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
-        await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8)    
-        await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8)
+    await Set(PATH_ISMOVING, True, DataType.BOOLEAN)
 
 async def handleDecelerate():
     """ Decelerates car. If car was in N or D gear and speed goes below 0, automatically goes into R """
@@ -175,7 +170,12 @@ async def handleDecelerate():
 
     originalSpeed = valueMap[PATH_VEHICLE_SPEED]
     newSpeed = max(originalSpeed - SPEED_INCREMENT, -MAX_SPEED)
+    
+    await Set(PATH_BRAKEPEDAL_ISACTIVE, "ACTIVE", DataType.STRING)
+    await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8)
     await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
+    await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8)
+    await Set(PATH_BRAKEPEDAL_ISACTIVE, "INACTIVE", DataType.STRING)
 
     if newSpeed == 0:
         # We are stationary, so set car to neutral
@@ -187,11 +187,6 @@ async def handleDecelerate():
     if newSpeed < 0 and originalSpeed >= 0:
         # If previous speed was positive and now we're into negative, go into reverse gear
         await handleGearReverse()
-    elif newSpeed >= 0:
-        # Pump brakes if in positive speed to decelerate
-        await Set(PATH_BRAKEPEDAL_POSITION, 50, DataType.UINT8)
-        await Set(PATH_VEHICLE_SPEED, newSpeed, DataType.FLOAT)
-        await Set(PATH_BRAKEPEDAL_POSITION, 0, DataType.UINT8)
 
 async def handleLeftTurn():
     """ Axle turn Left to turn car. VSS Values are Positive """
@@ -356,8 +351,10 @@ async def handleEmergencyBraking():
     if currentSpeed == 0:
         return    
 
-    # Emit Vehicle.Chassis.Brake.IsDriverEmergencyBrakingDetected True
     # TODO Reduce Speed till 0 aggressively
+    # Emit Vehicle.Chassis.Brake.IsDriverEmergencyBrakingDetected True
+    # PATH_BRAKEPEDAL_POSITION = Full
+    # PATH_BRAKEPE_ISACTIVE = True
     # Emit Vehicle.Chassis.Brake.IsDriverEmergencyBrakingDetected False
     pass
 
@@ -368,6 +365,10 @@ async def handleEngageParkingBrake():
         await Set(PATH_PARKING_BRAKE_ENGAGED, True, DataType.BOOLEAN)
     else:
         await Set(PATH_PARKING_BRAKE_ENGAGED, False, DataType.BOOLEAN)
+
+async def handleHorn():
+    # TODO: Vehicle.Body.Horn.IsActive
+    pass
 
 # Keyboard Bindings
 keyboard.add_hotkey('Q', lambda: asyncio.run(handleEnginePower())) # Turn off and On Engine
@@ -385,6 +386,7 @@ keyboard.add_hotkey('3', lambda: asyncio.run(handleGearManual())) # Gear: Sport/
 keyboard.add_hotkey('4', lambda: asyncio.run(handleGearReverse())) # Gear: Reverse
 keyboard.add_hotkey('5', lambda: asyncio.run(handleGearDrive())) # Gear: Drive
 keyboard.add_hotkey('E', lambda: asyncio.run(handleEngageParkingBrake())) # Parking Brake
+keyboard.add_hotkey('F', lambda: asyncio.run(handleHorn())) # Parking Brake
 keyboard.add_hotkey('space', lambda: asyncio.run(handleBraking())) # Braking
 keyboard.add_hotkey('shift+space', lambda: asyncio.run(handleEmergencyBraking())) # Braking
 
@@ -415,8 +417,7 @@ print(f""" {Fore.CYAN}
       {Fore.YELLOW}| {Fore.RED}3        {Fore.YELLOW}| {Fore.RED}gear sport/manual {Fore.YELLOW}|
       {Fore.YELLOW}| {Fore.RED}4        {Fore.YELLOW}| {Fore.RED}gear reverse      {Fore.YELLOW}|
       {Fore.YELLOW}| {Fore.RED}5        {Fore.YELLOW}| {Fore.RED}gear drive        {Fore.YELLOW}|
-      {Fore.YELLOW} ------------------------------ 
-      
+      {Fore.YELLOW} ------------------------------       
 """)
 asyncio.run(provisionVehicleValues())
 asyncio.run(subscribe())
